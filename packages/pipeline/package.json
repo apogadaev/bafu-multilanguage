@@ -1,0 +1,23 @@
+{
+  "name": "@bafu/pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "extract": "tsx src/interfaces/cli/extract.ts ../../sample-10 ../../translations",
+    "translate": "tsx src/interfaces/cli/translate.ts ../../translations ru claude-opus-5"
+  },
+  "dependencies": {
+    "@bafu/domain": "*",
+    "@anthropic-ai/sdk": "latest",
+    "fast-xml-parser": "^4.5.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "vitest": "^3.0.0",
+    "typescript": "^5.7.0"
+  }
+}
