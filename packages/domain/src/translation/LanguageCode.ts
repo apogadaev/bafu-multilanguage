@@ -1,9 +1,11 @@
+import isoLang from 'iso-639-1';
+
 export class LanguageCode {
   private constructor(readonly value: string) {}
 
   static create(value: string): LanguageCode {
-    if (!/^[a-z]{2}$/.test(value)) {
-      throw new Error(`LanguageCode must be a two-letter lowercase ISO 639-1 code, got: "${value}"`);
+    if (!isoLang.validate(value)) {
+      throw new Error(`LanguageCode must be a valid ISO 639-1 code, got: "${value}"`);
     }
     return new LanguageCode(value);
   }
