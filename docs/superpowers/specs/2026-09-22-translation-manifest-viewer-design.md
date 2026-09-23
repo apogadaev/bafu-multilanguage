@@ -52,7 +52,7 @@ docs/                            # specs (unchanged)
 ## 2. Demo scope
 
 - Dataset: `sample-10/` (all 10 processes).
-- Language: Russian (`ru`) only, via `@bafu/pipeline`'s `translate` CLI backed by `ClaudeTranslator`.
+- Language: Russian (`ru`) only, via `@bafu/pipeline`'s `translate` CLI backed by `HuggingFaceTranslator` (`google/translategemma-12b-it`, served via a Hugging Face Inference Endpoint in the EU).
 - "Iteration 1" includes actually running `extract` then `translate --lang ru` against `sample-10/` to produce real `translations/*.xml`, not just building the viewer against fixtures.
 
 ## 3. Viewer internals
@@ -88,12 +88,12 @@ translate --lang ru ──▶ translations/process_<uuid>.ru.xml
 ## 4. Error handling & testing
 
 - **Error handling:** missing `ru` sidecar for a field/dataset renders as "not translated," never as an error state. A malformed manifest/sidecar file (shouldn't happen since these are always machine-generated, but the parser should not crash the whole app on one bad file) surfaces as an inline error for that one dataset row, not a blank screen.
-- **Testing:** `FetchManifestRepository` and both use cases get unit tests against fixture XML served via a mocked `fetch`. `DatasetList`/`DatasetDetail` get component tests with fake repository data. Nothing in the viewer's automated tests touches a live Claude call — that boundary is already owned by `@bafu/pipeline`'s own tests (foundation spec §8).
+- **Testing:** `FetchManifestRepository` and both use cases get unit tests against fixture XML served via a mocked `fetch`. `DatasetList`/`DatasetDetail` get component tests with fake repository data. Nothing in the viewer's automated tests touches a live Hugging Face Inference Endpoint call — that boundary is already owned by `@bafu/pipeline`'s own tests (foundation spec §8).
 
 ## 5. CI & Deployment
 
-- **CI (GitHub Actions, on push/PR):** install workspace deps, `tsc --noEmit` across all three packages, lint, run the unit test suites for `@bafu/domain`, `@bafu/pipeline`, and `@bafu/viewer`. No live Claude API calls in CI.
-- **Deployment (GitHub Pages):** `@bafu/viewer` is built with `vite build`; a GitHub Actions workflow deploys the build output to GitHub Pages on push to `main` (`actions/deploy-pages`). `translations/` (the Claude-generated manifest + `ru` sidecars for `sample-10`, plus `index.json`) is **committed to the repo** as static data and copied into the build output — not regenerated in CI, since that would need a Claude API key as a CI secret firing on every push. Refreshing translations is a manual local step (`npm run translate -- --lang ru`), with the updated output committed like any other change.
+- **CI (GitHub Actions, on push/PR):** install workspace deps, `tsc --noEmit` across all three packages, lint, run the unit test suites for `@bafu/domain`, `@bafu/pipeline`, and `@bafu/viewer`. No live Hugging Face Inference Endpoint calls in CI.
+- **Deployment (GitHub Pages):** `@bafu/viewer` is built with `vite build`; a GitHub Actions workflow deploys the build output to GitHub Pages on push to `main` (`actions/deploy-pages`). `translations/` (the generated manifest + `ru` sidecars for `sample-10`, plus `index.json`) is **committed to the repo** as static data and copied into the build output — not regenerated in CI, since that would need an `HF_TOKEN` as a CI secret firing on every push (and the Inference Endpoint may not even be running continuously — HF Inference Endpoints can scale to zero between uses). Refreshing translations is a manual local step (`npm run translate -- --lang ru`), with the updated output committed like any other change.
 - **Prerequisite:** this directory has no git repo or GitHub remote yet. `git init` + creating/connecting the GitHub repo is step zero of implementation, not something done during design.
 
 ## 6. Explicitly out of scope for this iteration

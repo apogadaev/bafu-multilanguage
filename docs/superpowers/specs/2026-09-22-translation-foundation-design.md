@@ -31,7 +31,7 @@ translations/process_<uuid>.xml            (manifest: source text + hash, per fi
         │
         │  target language (ISO2) + translator (model name)
         ▼
-  [Translator interface]  ── concrete implementation calls Claude
+  [Translator interface]  ── concrete implementation calls an EU-hosted open model
         │
         ▼
 translations/process_<uuid>.<lang>.xml     (sidecar: translated text + status +
@@ -40,7 +40,7 @@ translations/process_<uuid>.<lang>.xml     (sidecar: translated text + status +
 ```
 
 - **Extraction is language-agnostic.** It never depends on a target language; its output (the manifest) is the single source of truth for "what needs translating," independent of how many languages get generated.
-- **Translation is per `(manifest, language, translator)`.** The `Translator` is a domain port; a real implementation calls the Claude API, but nothing above that port knows or cares.
+- **Translation is per `(manifest, language, translator)`.** The `Translator` is a domain port; a real implementation calls a Hugging Face Inference Endpoint, but nothing above that port knows or cares.
 - **The original ecoSpold files are never modified.** Manifests and sidecars are sidecar artifacts in a new `translations/` directory, not embedded in or merged into the source files. If a fully ecoSpold-valid per-language file is ever needed downstream, that's a cheap later merge step (source + sidecar → `process_<uuid>_<lang>.xml`), not something this layer produces.
 
 ### Why sidecar files, not a per-language ecoSpold clone
@@ -85,12 +85,12 @@ packages/
         xml/
           XmlManifestRepository.ts           # implements ManifestRepository
           XmlTranslationRepository.ts        # implements TranslationRepository
-        claude/
-          ClaudeTranslator.ts                # implements Translator, calls Anthropic SDK
+        huggingface/
+          HuggingFaceTranslator.ts           # implements Translator, calls an HF Inference Endpoint via fetch()
       interfaces/
         cli/
           extract.ts     # wires EcoSpoldSourceRepository + XmlManifestRepository -> ExtractManifestUseCase
-          translate.ts   # wires XmlManifestRepository + ClaudeTranslator + XmlTranslationRepository -> TranslateProcessUseCase
+          translate.ts   # wires XmlManifestRepository + HuggingFaceTranslator + XmlTranslationRepository -> TranslateProcessUseCase
 
 translations/                    # generated output (manifests + sidecars); not source code, not hand-edited
   process_<uuid>.xml
@@ -98,7 +98,7 @@ translations/                    # generated output (manifests + sidecars); not 
   index.json                      # added by the viewer spec: [{processId, displayName}, …]
 ```
 
-Domain and application layers contain no I/O and no SDK imports; every external dependency (filesystem, Anthropic API) lives in `infrastructure/` behind a port defined in `domain/` or `application/ports/`. `@bafu/pipeline` depends on `@bafu/domain`; nothing depends on `@bafu/pipeline`.
+Domain and application layers contain no I/O and no SDK imports; every external dependency (filesystem, the Hugging Face Inference Endpoint) lives in `infrastructure/` behind a port defined in `domain/` or `application/ports/`. `@bafu/pipeline` depends on `@bafu/domain`; nothing depends on `@bafu/pipeline`.
 
 ## 5. Data schema
 
@@ -124,7 +124,7 @@ One `<field>` per translatable attribute. `hash` is SHA-256 of the trimmed sourc
 `path` values mirror the manifest exactly. `sourceHash` records which manifest version this sidecar was translated against — the hook a future diff/re-translation check will use, though that check isn't built in this layer.
 
 ```xml
-<translation processId="001835f5-ba6d-361a-8990-7c894d80c087" language="de" translator="claude-opus-5" generatedAt="2026-09-22T10:05:00Z">
+<translation processId="001835f5-ba6d-361a-8990-7c894d80c087" language="de" translator="google/translategemma-12b-it" generatedAt="2026-09-22T10:05:00Z">
   <field path="referenceFunction/name" text="Erdgas, verflüssigt, Produktion AE, am Frachtschiff" sourceHash="sha256:ab12…" status="draft"/>
   …
 </translation>
@@ -145,12 +145,12 @@ interface Translator {
 }
 ```
 
-For this layer's demo, `ClaudeTranslator` (in `infrastructure/claude/`) implements this port using the Anthropic TypeScript SDK. By default it batches **all fields of one process into a single request** (keeps translation context consistent within a record, minimizes call count) and parses a structured/tool-use response back into `TranslatedField[]` — never a free-text response parsed by string-splitting. The `translatorId` parameter is passed straight through as the model ID (e.g. `claude-opus-5`), so swapping models requires no code change.
+For this layer's demo, `HuggingFaceTranslator` (in `infrastructure/huggingface/`) implements this port against a Hugging Face Inference Endpoint deployed in an EU region, running `google/translategemma-12b-it` — chosen over a hosted-API provider (Claude was evaluated and ruled out entirely, not merely deprioritized; see `2026-09-22-translator-comparison-design.md`, since superseded) for data-residency reasons: BAFU data stays on EU-controlled infrastructure. It calls the endpoint's OpenAI-compatible `/v1/chat/completions` route with plain `fetch()` — no SDK dependency. Unlike a batched-single-request design, TranslateGemma's chat template requires exactly one content entry per request, so `HuggingFaceTranslator` makes **one HTTP request per field**, not one per process. The `translatorId` parameter is passed straight through as the model ID (e.g. `google/translategemma-12b-it`).
 
 ## 7. Error handling
 
 - **Extraction:** a missing or unparseable expected element is skipped with a warning; extraction continues for the rest of the process. An unparseable source file is skipped with a logged error; the batch continues (matters once this runs against the full 11,947-file corpus, not just `sample-10/`).
-- **Translation:** a `Translation` aggregate is written only once every field for that `(process, language)` has succeeded — no partial/corrupt sidecars. A failure for one process is logged and does not abort the batch for other processes. Transient API failures (429/5xx) are handled by the SDK's built-in retry.
+- **Translation:** a `Translation` aggregate is written only once every field for that `(process, language)` has succeeded — no partial/corrupt sidecars. A failure for one process is logged and does not abort the batch for other processes. `HuggingFaceTranslator` has no built-in retry (no SDK sits underneath it) — a transient failure on one field fails that process's whole translation for this run; re-running `translate` is the recovery path.
 - **Idempotency:** both scripts are safe to re-run. `extract` overwrites the manifest; `translate` overwrites that language's sidecar. No versioning is needed at this layer — the manifest and sidecar are derived/generated artifacts, never hand-edited.
 
 ## 8. Testing
@@ -159,13 +159,13 @@ For this layer's demo, `ClaudeTranslator` (in `infrastructure/claude/`) implemen
 - `infrastructure/ecospold/EcoSpoldXmlParser`: tested against the real fixtures in `sample-10/` (already curated for size/type variety).
 - `infrastructure/xml/*Repository`: round-trip tests (write, read back, assert equality).
 - `application/*UseCase`: tested with in-memory fake repositories and a fake `Translator` — no real API calls in the automated suite.
-- `ClaudeTranslator`: exercised via a manual/opt-in script against `sample-10/`, not part of the default automated test run (avoids spending API calls in CI).
+- `HuggingFaceTranslator`: exercised via a manual/opt-in script against `sample-10/`, not part of the default automated test run (avoids spending inference cost in CI).
 
 ## 9. Sub-projects (out of scope)
 
 Each gets its own brainstorming → spec → plan cycle, building on this layer's manifest/sidecar output:
 
-- **Confidence scoring** — QE model (COMETKiwi/xCOMET) + deterministic rule checks (placeholders, numbers/dates, glossary, locale) + optional LLM-as-judge for borderline rows.
+- **Confidence scoring** — QE model (COMETKiwi/xCOMET, or Google MetricX-25 — built on Gemma 3 12B, predicts MQM-style error scores; see `2026-09-22-translator-comparison-design.md` for sourcing) + deterministic rule checks (placeholders, numbers/dates, glossary, locale) + optional LLM-as-judge for borderline rows.
 - **Community review** — contributor/reviewer/coordinator roles, 2-vote consensus, gold items, MQM-structured flags; needs a queryable persistence layer (see §3).
 - **Publish gating** — per-row and per-language gates, English fallback labeling, provenance storage.
 - **Annual re-run / diffing** — using the manifest's per-field `hash` to detect changed source text and re-translate only the delta; carrying forward prior approvals. The hash is already produced by this layer specifically so that hook exists later.
