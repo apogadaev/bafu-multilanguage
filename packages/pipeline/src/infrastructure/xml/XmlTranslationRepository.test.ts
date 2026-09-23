@@ -45,4 +45,59 @@ describe("XmlTranslationRepository", () => {
     const result = await repo.load("nonexistent", LanguageCode.create("fr"));
     expect(result).toBeNull();
   });
+
+  it("round-trips a translation with multiple fields", async () => {
+    dir = await mkdtemp(join(tmpdir(), "bafu-translation-"));
+    const repo = new XmlTranslationRepository(dir);
+    const translation = Translation.create({
+      processId: "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+      language: LanguageCode.create("de"),
+      translator: "claude-sonnet-4",
+      generatedAt: new Date("2026-09-22T14:30:00.000Z"),
+      fields: [
+        TranslatedField.create({
+          path: "section/title",
+          text: "Abschnitt",
+          sourceHash: `sha256:${"b".repeat(64)}`,
+          status: "draft",
+        }),
+        TranslatedField.create({
+          path: "section/description",
+          text: "Dies ist eine Beschreibung",
+          sourceHash: `sha256:${"c".repeat(64)}`,
+          status: "draft",
+        }),
+        TranslatedField.create({
+          path: "section/note",
+          text: "Notiz",
+          sourceHash: `sha256:${"d".repeat(64)}`,
+          status: "draft",
+        }),
+      ],
+    });
+
+    await repo.save(translation);
+    const loaded = await repo.load("f47ac10b-58cc-4372-a567-0e02b2c3d479", LanguageCode.create("de"));
+
+    expect(loaded).not.toBeNull();
+    expect(loaded?.fields).toHaveLength(3);
+    expect(loaded?.fields[0]).toMatchObject({
+      path: "section/title",
+      text: "Abschnitt",
+      sourceHash: `sha256:${"b".repeat(64)}`,
+      status: "draft",
+    });
+    expect(loaded?.fields[1]).toMatchObject({
+      path: "section/description",
+      text: "Dies ist eine Beschreibung",
+      sourceHash: `sha256:${"c".repeat(64)}`,
+      status: "draft",
+    });
+    expect(loaded?.fields[2]).toMatchObject({
+      path: "section/note",
+      text: "Notiz",
+      sourceHash: `sha256:${"d".repeat(64)}`,
+      status: "draft",
+    });
+  });
 });
