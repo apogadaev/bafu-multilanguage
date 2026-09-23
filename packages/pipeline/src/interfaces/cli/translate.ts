@@ -28,7 +28,7 @@ export async function translateBatch(
 async function main(): Promise<void> {
   const translationsDir = process.argv[2] ?? "translations";
   const languageArg = process.argv[3] ?? "ru";
-  const translatorId = process.argv[4] ?? "google/translategemma-12b-it";
+  const translatorId = process.argv[4] ?? "google/translategemma-4b-it";
 
   const endpointUrl = process.env.HF_ENDPOINT_URL;
   const apiToken = process.env.HF_TOKEN;

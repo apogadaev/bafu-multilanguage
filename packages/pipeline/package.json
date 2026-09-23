@@ -7,7 +7,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "extract": "tsx src/interfaces/cli/extract.ts ../../sample-10 ../../translations",
-    "translate": "tsx src/interfaces/cli/translate.ts ../../translations ru claude-opus-5"
+    "translate": "tsx src/interfaces/cli/translate.ts ../../translations ru google/translategemma-4b-it"
   },
   "dependencies": {
     "@bafu/domain": "*",
