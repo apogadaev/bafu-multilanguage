@@ -124,7 +124,7 @@ One `<field>` per translatable attribute. `hash` is SHA-256 of the trimmed sourc
 `path` values mirror the manifest exactly. `sourceHash` records which manifest version this sidecar was translated against — the hook a future diff/re-translation check will use, though that check isn't built in this layer.
 
 ```xml
-<translation processId="001835f5-ba6d-361a-8990-7c894d80c087" language="de" translator="google/translategemma-12b-it" generatedAt="2026-09-22T10:05:00Z">
+<translation processId="001835f5-ba6d-361a-8990-7c894d80c087" language="de" translator="google/translategemma-4b-it" generatedAt="2026-09-22T10:05:00Z">
   <field path="referenceFunction/name" text="Erdgas, verflüssigt, Produktion AE, am Frachtschiff" sourceHash="sha256:ab12…" status="draft"/>
   …
 </translation>
@@ -145,7 +145,7 @@ interface Translator {
 }
 ```
 
-For this layer's demo, `HuggingFaceTranslator` (in `infrastructure/huggingface/`) implements this port against a Hugging Face Inference Endpoint deployed in an EU region, running `google/translategemma-12b-it` — chosen over a hosted-API provider (Claude was evaluated and ruled out entirely, not merely deprioritized; see `2026-09-22-translator-comparison-design.md`, since superseded) for data-residency reasons: BAFU data stays on EU-controlled infrastructure. It calls the endpoint's OpenAI-compatible `/v1/chat/completions` route with plain `fetch()` — no SDK dependency. Unlike a batched-single-request design, TranslateGemma's chat template requires exactly one content entry per request, so `HuggingFaceTranslator` makes **one HTTP request per field**, not one per process. The `translatorId` parameter is passed straight through as the model ID (e.g. `google/translategemma-12b-it`).
+For this layer's demo, `HuggingFaceTranslator` (in `infrastructure/huggingface/`) implements this port against a Hugging Face Inference Endpoint deployed in an EU region, running `google/translategemma-4b-it` — chosen over a hosted-API provider (Claude was evaluated and ruled out entirely, not merely deprioritized; see `2026-09-22-translator-comparison-design.md`, since superseded) for data-residency reasons: BAFU data stays on EU-controlled infrastructure. It calls the endpoint's OpenAI-compatible `/v1/chat/completions` route with plain `fetch()` — no SDK dependency. Unlike a batched-single-request design, TranslateGemma's chat template requires exactly one content entry per request, so `HuggingFaceTranslator` makes **one HTTP request per field**, not one per process. The `translatorId` parameter is passed straight through as the model ID (e.g. `google/translategemma-4b-it`).
 
 ## 7. Error handling
 

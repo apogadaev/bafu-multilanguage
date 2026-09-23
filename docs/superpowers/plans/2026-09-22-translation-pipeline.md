@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build `@bafu/domain` and `@bafu/pipeline` — a working CLI that extracts every translatable field from the `sample-10/` ecoSpold XML files into a manifest, then translates each manifest into Russian via TranslateGemma-12B-it (an open model, served via a Hugging Face Inference Endpoint in the EU), producing real `translations/*.xml` output.
+**Goal:** Build `@bafu/domain` and `@bafu/pipeline` — a working CLI that extracts every translatable field from the `sample-10/` ecoSpold XML files into a manifest, then translates each manifest into Russian via TranslateGemma-4B-it (an open model, served via a Hugging Face Inference Endpoint in the EU), producing real `translations/*.xml` output.
 
 **Architecture:** npm-workspaces monorepo with DDD layering. `@bafu/domain` is pure TypeScript (no I/O, no Node APIs) holding the manifest/translation value objects and the `Translator` port. `@bafu/pipeline` implements two use cases (`ExtractManifestUseCase`, `TranslateProcessUseCase`) against repository ports, with XML-file infrastructure adapters and a `Translator` adapter backed by a self-hosted-in-the-EU open model, wired together by two CLI entry points (`extract`, `translate`).
 
@@ -17,7 +17,7 @@
 - Manifest/sidecar hash format: `sha256:<64 lowercase hex chars>`, computed over the trimmed source text.
 - A `Translation` is only ever saved once every field for that `(process, language)` has been translated — never partially.
 - No automated test may make a real network call to the Hugging Face Inference Endpoint. `HuggingFaceTranslator`'s own request/response logic is tested by stubbing global `fetch`; a live run only happens in Task 13, manually.
-- Model default for the CLI: `google/translategemma-12b-it`, served via a Hugging Face Inference Endpoint deployed in an EU region, overridable by CLI argument. No fallback to any other provider — see `docs/superpowers/specs/2026-09-22-translator-comparison-design.md` for why Claude was ruled out (superseded by this decision — Claude is not a candidate, full stop, not just "compared against").
+- Model default for the CLI: `google/translategemma-4b-it`, served via a Hugging Face Inference Endpoint deployed in an EU region, overridable by CLI argument. No fallback to any other provider — see `docs/superpowers/specs/2026-09-22-translator-comparison-design.md` for why Claude was ruled out (superseded by this decision — Claude is not a candidate, full stop, not just "compared against").
 - `HuggingFaceTranslator` makes one HTTP request per translatable field, not one request per process. This is not a design choice — TranslateGemma's chat template requires each message's `content` to be a list with exactly one entry, so multiple fields cannot be batched into a single request the way the earlier Claude-based design did. There is no automatic retry on transient failures (unlike an SDK-backed client) — accepted as a known limitation for this hackathon scope.
 
 ---
@@ -776,7 +776,7 @@ Create `packages/pipeline/package.json`:
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "extract": "tsx src/interfaces/cli/extract.ts ../../sample-10 ../../translations",
-    "translate": "tsx src/interfaces/cli/translate.ts ../../translations ru google/translategemma-12b-it"
+    "translate": "tsx src/interfaces/cli/translate.ts ../../translations ru google/translategemma-4b-it"
   },
   "dependencies": {
     "@bafu/domain": "*",
@@ -1654,7 +1654,7 @@ git commit -m "feat(pipeline): add XmlTranslationRepository"
 - Consumes: `Translator` port, `LanguageCode`/`Translation`/`TranslatedField`/`TranslationManifest` from `@bafu/domain`
 - Produces: `HuggingFaceTranslator` implementing `Translator`, constructed with `(endpointUrl: string, apiToken: string)`
 
-**API contract (verified against `google/translategemma-12b-it`'s model card and the Hugging Face Text Generation Inference Messages API docs — not guessed):** `POST <endpointUrl>/v1/chat/completions`, header `Authorization: Bearer <apiToken>`, body `{"model": <translatorId>, "messages": [{"role": "user", "content": [{"type": "text", "source_lang_code": <manifest.sourceLanguage>, "target_lang_code": <targetLanguage>, "text": <field text>}]}]}`. Response is OpenAI-chat-completion-shaped; translated text is at `choices[0].message.content`. TranslateGemma's chat template requires `content` to be a list with **exactly one entry** — this model cannot translate multiple fields in a single request, so `HuggingFaceTranslator` makes one HTTP call per field, unlike the batched-single-request design an SDK-backed provider would allow.
+**API contract (verified against `google/translategemma-4b-it`'s model card and the Hugging Face Text Generation Inference Messages API docs — not guessed):** `POST <endpointUrl>/v1/chat/completions`, header `Authorization: Bearer <apiToken>`, body `{"model": <translatorId>, "messages": [{"role": "user", "content": [{"type": "text", "source_lang_code": <manifest.sourceLanguage>, "target_lang_code": <targetLanguage>, "text": <field text>}]}]}`. Response is OpenAI-chat-completion-shaped; translated text is at `choices[0].message.content`. TranslateGemma's chat template requires `content` to be a list with **exactly one entry** — this model cannot translate multiple fields in a single request, so `HuggingFaceTranslator` makes one HTTP call per field, unlike the batched-single-request design an SDK-backed provider would allow.
 
 - [ ] **Step 1: Write the failing tests, stubbing global `fetch` (no network call)**
 
@@ -1706,9 +1706,9 @@ describe("HuggingFaceTranslator", () => {
     });
 
     const translator = new HuggingFaceTranslator("https://example.endpoints.huggingface.cloud", "hf_test-token");
-    const translation = await translator.translate(manifest, LanguageCode.create("ru"), "google/translategemma-12b-it");
+    const translation = await translator.translate(manifest, LanguageCode.create("ru"), "google/translategemma-4b-it");
 
-    expect(translation.translator).toBe("google/translategemma-12b-it");
+    expect(translation.translator).toBe("google/translategemma-4b-it");
     expect(translation.fields).toHaveLength(2);
     expect(translation.fields[0].path).toBe("referenceFunction/name");
     expect(translation.fields[0].text).toBe("Природный газ, сжиженный");
@@ -1729,7 +1729,7 @@ describe("HuggingFaceTranslator", () => {
     });
 
     const translator = new HuggingFaceTranslator("https://my-endpoint.endpoints.huggingface.cloud", "hf_test-token");
-    await translator.translate(manifest, LanguageCode.create("ru"), "google/translategemma-12b-it");
+    await translator.translate(manifest, LanguageCode.create("ru"), "google/translategemma-4b-it");
 
     expect(fetchMock).toHaveBeenCalledWith(
       "https://my-endpoint.endpoints.huggingface.cloud/v1/chat/completions",
@@ -1741,7 +1741,7 @@ describe("HuggingFaceTranslator", () => {
     const [, init] = fetchMock.mock.calls[0];
     const body = JSON.parse(init.body as string);
     expect(body).toEqual({
-      model: "google/translategemma-12b-it",
+      model: "google/translategemma-4b-it",
       messages: [
         {
           role: "user",
@@ -1765,7 +1765,7 @@ describe("HuggingFaceTranslator", () => {
     });
 
     const translator = new HuggingFaceTranslator("https://my-endpoint.endpoints.huggingface.cloud", "hf_test-token");
-    await expect(translator.translate(manifest, LanguageCode.create("ru"), "google/translategemma-12b-it")).rejects.toThrow(
+    await expect(translator.translate(manifest, LanguageCode.create("ru"), "google/translategemma-4b-it")).rejects.toThrow(
       /request failed \(503\)/,
     );
   });
@@ -1784,7 +1784,7 @@ describe("HuggingFaceTranslator", () => {
     });
 
     const translator = new HuggingFaceTranslator("https://my-endpoint.endpoints.huggingface.cloud", "hf_test-token");
-    await expect(translator.translate(manifest, LanguageCode.create("ru"), "google/translategemma-12b-it")).rejects.toThrow(
+    await expect(translator.translate(manifest, LanguageCode.create("ru"), "google/translategemma-4b-it")).rejects.toThrow(
       /no translated text/,
     );
   });
@@ -2084,7 +2084,7 @@ export async function translateBatch(
 async function main(): Promise<void> {
   const translationsDir = process.argv[2] ?? "translations";
   const languageArg = process.argv[3] ?? "ru";
-  const translatorId = process.argv[4] ?? "google/translategemma-12b-it";
+  const translatorId = process.argv[4] ?? "google/translategemma-4b-it";
 
   const endpointUrl = process.env.HF_ENDPOINT_URL;
   const apiToken = process.env.HF_TOKEN;
@@ -2135,7 +2135,7 @@ git commit -m "feat(pipeline): add translate CLI"
 
 - [ ] **Step 1: Verify Hugging Face Inference Endpoint credentials are available**
 
-Confirm `HF_ENDPOINT_URL` (the deployed EU-region Inference Endpoint's base URL, serving `google/translategemma-12b-it`) and `HF_TOKEN` are set in the environment before continuing — see the pipeline plan's Global Constraints; do not hardcode either in any file. `translate.ts`'s `main()` throws immediately with a clear message if either is missing.
+Confirm `HF_ENDPOINT_URL` (the deployed EU-region Inference Endpoint's base URL, serving `google/translategemma-4b-it`) and `HF_TOKEN` are set in the environment before continuing — see the pipeline plan's Global Constraints; do not hardcode either in any file. `translate.ts`'s `main()` throws immediately with a clear message if either is missing.
 
 - [ ] **Step 2: Run extraction**
 
@@ -2150,7 +2150,7 @@ Expected: prints one `Translated <uuid> (<name>) -> ru` line per dataset; `trans
 - [ ] **Step 4: Spot-check the output**
 
 Open `translations/process_001835f5-ba6d-361a-8990-7c894d80c087.ru.xml` and confirm:
-- `translator="google/translategemma-12b-it"`, `language="ru"`, `status="draft"` on every field
+- `translator="google/translategemma-4b-it"`, `language="ru"`, `status="draft"` on every field
 - The `referenceFunction/name` field's `text` is a plausible Russian translation of "Natural gas, liquefied, production AE, at freight ship"
 - Every `sourceHash` matches the corresponding field's `hash` in `translations/process_001835f5-ba6d-361a-8990-7c894d80c087.xml`
 
@@ -2168,6 +2168,6 @@ git commit -m "chore: generate Russian translations for sample-10 via the pipeli
 ## Self-Review Notes
 
 - **Spec coverage:** manifest schema (§5) → Tasks 2, 7; sidecar schema (§5) → Tasks 3, 9; `Translator` interface (§6) → Tasks 3, 10; error handling (§7 — extraction skips bad fields, translation only saves whole `Translation`, idempotent re-runs) → covered by `TranslatableField`/`ExtractManifestUseCase` skipping empty attributes and `HuggingFaceTranslator` throwing before any partial `Translation` is constructed; testing strategy (§8) → one task per component, matching the spec's layer-by-layer test plan; monorepo directory structure (viewer spec §1) → Tasks 1-4 scaffold exactly that tree.
-- **2026-09-22 revision:** Task 10 was originally `ClaudeTranslator` (Anthropic SDK); replaced with `HuggingFaceTranslator` (plain `fetch()` against a Hugging Face Inference Endpoint running `google/translategemma-12b-it` in the EU) after deciding Claude is not a translation-provider candidate at all — see `docs/superpowers/specs/2026-09-22-translator-comparison-design.md`, since superseded. This also removed the `@anthropic-ai/sdk`/`zod` dependencies from Task 4 and changed the per-field-vs-per-process request granularity (Task 10's own note explains why — it's a TranslateGemma chat-template constraint, not a design preference). Tasks 1-9's actual code was never Claude-specific (the `Translator` port was already provider-agnostic) and needed no changes; only Tasks 10, 12, 13 and the Global Constraints/header were revised.
+- **2026-09-22 revision:** Task 10 was originally `ClaudeTranslator` (Anthropic SDK); replaced with `HuggingFaceTranslator` (plain `fetch()` against a Hugging Face Inference Endpoint running `google/translategemma-4b-it` in the EU) after deciding Claude is not a translation-provider candidate at all — see `docs/superpowers/specs/2026-09-22-translator-comparison-design.md`, since superseded. This also removed the `@anthropic-ai/sdk`/`zod` dependencies from Task 4 and changed the per-field-vs-per-process request granularity (Task 10's own note explains why — it's a TranslateGemma chat-template constraint, not a design preference). Tasks 1-9's actual code was never Claude-specific (the `Translator` port was already provider-agnostic) and needed no changes; only Tasks 10, 12, 13 and the Global Constraints/header were revised.
 - **Placeholder scan:** no TBD/TODO; every step has real, complete code.
 - **Type consistency:** `TranslatableField`, `TranslationManifest`, `TranslatedField`, `Translation`, `LanguageCode`, `Translator`, `SourceRepository`/`SourceRecord`, `ManifestRepository`, `TranslationRepository`, and `DatasetIndexEntry` are each defined exactly once and referenced identically (same method/property names and types) across every task that consumes them.

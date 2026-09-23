@@ -315,7 +315,7 @@ describe("ViewDatasetUseCase", () => {
     const translation = Translation.create({
       processId: "abc",
       language: LanguageCode.create("ru"),
-      translator: "google/translategemma-12b-it",
+      translator: "google/translategemma-4b-it",
       generatedAt: new Date(),
       fields: [
         TranslatedField.create({ path: "referenceFunction/name", text: "Природный газ", sourceHash: validHash, status: "draft" }),
@@ -429,7 +429,7 @@ const MANIFEST_XML = `<?xml version="1.0"?>
 </translationManifest>`;
 
 const TRANSLATION_XML = `<?xml version="1.0"?>
-<translation processId="abc" language="ru" translator="google/translategemma-12b-it" generatedAt="2026-09-22T10:05:00.000Z">
+<translation processId="abc" language="ru" translator="google/translategemma-4b-it" generatedAt="2026-09-22T10:05:00.000Z">
   <field path="referenceFunction/name" text="Природный газ" sourceHash="sha256:${"a".repeat(64)}" status="draft"/>
 </translation>`;
 
@@ -476,7 +476,7 @@ describe("FetchManifestRepository", () => {
     vi.stubGlobal("fetch", fakeFetch({ "process_abc.ru.xml": { status: 200, body: TRANSLATION_XML } }));
     const repo = new FetchManifestRepository("/");
     const translation = await repo.loadTranslation("abc", LanguageCode.create("ru"));
-    expect(translation?.translator).toBe("google/translategemma-12b-it");
+    expect(translation?.translator).toBe("google/translategemma-4b-it");
     expect(translation?.fields[0].text).toBe("Природный газ");
     expect(translation?.fields[0].status).toBe("draft");
   });
@@ -791,7 +791,7 @@ describe("DatasetDetail", () => {
     const translation = Translation.create({
       processId: "abc",
       language: LanguageCode.create("ru"),
-      translator: "google/translategemma-12b-it",
+      translator: "google/translategemma-4b-it",
       generatedAt: new Date(),
       fields: [
         TranslatedField.create({ path: "referenceFunction/name", text: "Природный газ", sourceHash: validHash, status: "draft" }),

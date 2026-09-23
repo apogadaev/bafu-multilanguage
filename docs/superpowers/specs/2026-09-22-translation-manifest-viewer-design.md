@@ -52,7 +52,7 @@ docs/                            # specs (unchanged)
 ## 2. Demo scope
 
 - Dataset: `sample-10/` (all 10 processes).
-- Language: Russian (`ru`) only, via `@bafu/pipeline`'s `translate` CLI backed by `HuggingFaceTranslator` (`google/translategemma-12b-it`, served via a Hugging Face Inference Endpoint in the EU).
+- Language: Russian (`ru`) only, via `@bafu/pipeline`'s `translate` CLI backed by `HuggingFaceTranslator` (`google/translategemma-4b-it`, served via a Hugging Face Inference Endpoint in the EU).
 - "Iteration 1" includes actually running `extract` then `translate --lang ru` against `sample-10/` to produce real `translations/*.xml`, not just building the viewer against fixtures.
 
 ## 3. Viewer internals
